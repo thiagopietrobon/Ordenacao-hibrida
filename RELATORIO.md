@@ -1,79 +1,138 @@
-# Relatório — Quicksort híbrido (rápida + inserção)
+# Análise de Desempenho do Quicksort Híbrido
 
-## 1. O que foi feito
+## 1. Introdução
 
-- `rapida_pura`: quicksort com **pivô aleatório** e partição em **menores / iguais / maiores**.
-- `rapida_hibrida(lista, corte)`: igual à anterior, mas pedaços com **menos que `corte` elementos** são ordenados por **inserção**. O `corte` é parâmetro da função.
-- `benchmark.py`: mede o tempo com **20 000 inteiros aleatórios**, variando o corte em 1, 5, 10, 16, 20, 32, 50, 100 e 200, e compara com a rápida pura.
+O Quicksort é um algoritmo de ordenação baseado na estratégia de divisão e conquista. Ele escolhe um elemento como pivô, divide os demais elementos em partições e aplica o mesmo procedimento recursivamente até que a lista esteja ordenada.
 
-**Metodologia.** 50 vetores aleatórios distintos (valores em [0, 10⁶]); todas as variantes ordenam exatamente os mesmos vetores, em ordem embaralhada a cada repetição (para nenhuma variante ser favorecida por rodar sempre primeiro ou último). Cada resultado é conferido contra `sorted()`. O tempo reportado é a **mediana** das 50 repetições (mais robusta a picos de ruído do sistema que a média); a média e o desvio-padrão também aparecem na tabela. Ambiente: Python 3.12, execução em uma única CPU — os tempos absolutos mudam de máquina para máquina, as proporções são o que importa.
+Apesar de apresentar desempenho médio de \(O(n \log n)\), o Quicksort pode realizar chamadas recursivas e operações de particionamento desnecessárias quando trabalha com sublistas pequenas. Uma alternativa para reduzir esse custo é utilizar uma abordagem híbrida, combinando o Quicksort com o algoritmo Insertion Sort.
 
-## 2. Resultados
+Este trabalho tem como objetivo implementar e avaliar um Quicksort híbrido, verificando como diferentes valores de corte influenciam o tempo de execução e comparando os resultados com os obtidos pelo Quicksort puro.
 
-| Corte | Mediana (ms) | Média ± desvio (ms) | Ganho sobre a rápida pura (negativo = mais lenta) |
-|------:|-------------:|--------------------:|-------------------------:|
-| **pura** | 35,69 | 37,21 ± 4,63 | — |
-| 1 | 36,37 | 39,20 ± 8,43 | -1,9% |
-| 5 | 31,76 | 33,39 ± 4,67 | +11,0% |
-| 10 | 27,01 | 28,59 ± 4,40 | +24,3% |
-| 16 | 25,65 | 27,81 ± 4,79 | +28,1% |
-| **20** | **25,24** | 26,46 ± 3,53 | +29,3% |
-| 32 | 25,95 | 28,14 ± 5,49 | +27,3% |
-| 50 | 27,10 | 28,97 ± 5,88 | +24,1% |
-| 100 | 32,57 | 34,44 ± 5,52 | +8,7% |
-| 200 | 46,81 | 50,29 ± 9,65 | -31,2% |
+## 2. Implementação dos algoritmos
 
-![Tempo em função do corte](dados/resultados.png)
+Foram implementadas duas versões do Quicksort: a versão pura e a versão híbrida.
 
-Dados completos em `dados/resultados.csv`.
+### 2.1. Quicksort puro
 
-## 3. Qual corte deu o melhor tempo?
+A implementação do Quicksort puro escolhe aleatoriamente um pivô para dividir os elementos da lista em três grupos:
 
-Na rodada principal, o melhor foi **corte = 20**, com **25,24 ms**, contra **35,69 ms** da rápida pura: um **ganho de 29,3%** (a híbrida leva ~71% do tempo da pura, ou seja, é cerca de 1,41× mais rápida).
+- **Menores:** elementos menores que o pivô;
+- **Iguais:** elementos iguais ao pivô;
+- **Maiores:** elementos maiores que o pivô.
 
-**Atenção ao ler esse “melhor”:** os cortes 16, 20 e 32 ficam praticamente empatados (25,65, 25,24 e 25,95 ms) — a diferença entre eles é bem menor que o desvio-padrão (~4–5 ms). Para conferir, repeti o experimento com outra semente (`--semente 7`, em `dados/resultados_semente7.csv`): o vencedor foi o corte **32** (28,1% de ganho), mas de novo com 16, 20 e 32 separados por cerca de 1% entre si. A conclusão confiável não é “o corte ideal é 20”, e sim:
+O algoritmo aplica recursivamente o mesmo procedimento às partições menores e maiores, combinando os resultados para produzir a lista ordenada.
 
-> **A faixa ideal fica entre 16 e 32, com ganho de cerca de 27% a 29% sobre a rápida pura.**
+A escolha aleatória do pivô ajuda a reduzir a dependência do desempenho em relação à disposição inicial dos elementos.
 
-**Por que o ganho acontece.** Com n = 20 000, o quicksort puro sorteia e particiona cerca de 13 mil pedaços (13 230 na verificação da seção 5), muitos deles com poucos elementos. Para um pedaço de 3 ou 4 elementos, o custo fixo de cada chamada em Python — sortear pivô, montar três listas, concatenar — é bem maior que o trabalho útil. A inserção resolve esses pedaços sem recursão nem listas auxiliares, e como o pedaço é pequeno, seu custo quadrático ainda é desprezível.
+### 2.2. Quicksort híbrido
 
-**Por que o ganho para de crescer perto de 16–32.** A cada aumento do corte, economiza-se menos recursão (já eliminamos as chamadas mais numerosas) e a inserção fica mais cara. Por volta de 16–32 as duas forças se equilibram; daí em diante a curva sobe.
+O Quicksort híbrido utiliza a mesma estratégia de particionamento, mas substitui o Quicksort pelo Insertion Sort quando o tamanho da sublista fica abaixo do valor de corte definido.
 
-## 4. O que acontece com cortes grandes demais?
+O parâmetro `corte` determina o tamanho a partir do qual essa substituição ocorre. Dessa forma, o algoritmo permite avaliar diferentes combinações entre os dois métodos de ordenação.
 
-A inserção custa O(k²) por pedaço de tamanho k. Com corte grande, os pedaços entregues à inserção também são grandes, e o custo total passa a ser aproximadamente **proporcional a n · corte** — enquanto a economia de chamadas recursivas já se esgotou. Na curva principal:
+Quando o corte é igual a 1, nenhuma sublista com mais de um elemento é direcionada ao Insertion Sort. Nesse caso, o algoritmo mantém o comportamento de particionamento do Quicksort puro.
 
-- corte = 100: o ganho encolhe para 8,7%;
-- o ponto de empate com a rápida pura fica em torno de **120** (interpolação entre 100 e 200);
-- corte = 200: a híbrida fica **31% mais lenta** que a pura.
+## 3. Metodologia dos experimentos
 
-Para ver até onde isso vai, rodei também cortes bem maiores (15 repetições, `dados/extras_cortes_grandes.csv` / `.png`):
+Os experimentos foram realizados com os seguintes parâmetros:
 
-| Corte | Mediana (ms) | Tempo relativo à rápida pura |
-|------:|-------------:|-----------------------------:|
-| **pura** | 34,33 | 1,0× |
-| 100 | 32,24 | 0,9× |
-| 200 | 45,84 | 1,3× |
-| 500 | 99,46 | 2,9× |
-| 1000 | 212,20 | 6,2× |
-| 2000 | 458,98 | 13,4× |
-| 5000 | 1285,43 | 37,4× |
+- **Quantidade de elementos:** 20.000;
+- **Distribuição dos dados:** valores aleatórios;
+- **Repetições:** 50 execuções para cada configuração;
+- **Valores de corte:** 1, 5, 10, 16, 20, 32, 50, 100 e 200;
+- **Referência de comparação:** Quicksort puro.
 
-O tempo cresce aproximadamente de forma linear com o corte (cerca de 0,2–0,26 ms por unidade de corte, nesta máquina), exatamente como previsto por n · corte. No limite, com corte maior que o vetor inteiro, a “híbrida” vira uma inserção pura sobre 20 000 elementos, com custo quadrático.
+Para tornar a comparação mais consistente, as configurações foram avaliadas utilizando os mesmos conjuntos de dados em cada repetição. A ordem das medições foi embaralhada, e as sementes utilizadas na escolha dos pivôs foram controladas durante as comparações.
 
-## 5. Corte = 1 se comporta como a rápida pura?
+Os resultados de cada configuração foram verificados para garantir que as listas produzidas estivessem corretamente ordenadas.
 
-**Sim.** Evidências:
+O tempo de execução foi medido em cada repetição. Para a comparação principal, utilizou-se a mediana dos tempos, uma medida menos sensível a execuções excepcionalmente lentas ou rápidas.
 
-1. **Por construção:** a inserção só é chamada para pedaços com 2 ≤ tamanho < corte. Com corte = 1 essa condição nunca é verdadeira, então o código percorre exatamente os mesmos caminhos da rápida pura. (Pedaços de 0 ou 1 elemento já estão ordenados e são devolvidos direto, nas duas versões; por isso o corte = 2 também equivale à pura.)
-2. **Verificação experimental** (`verifica_corte_1` em `benchmark.py`, mesma semente de pivôs nas duas versões, n = 20 000):
-   - resultado idêntico entre pura, híbrida com corte = 1 e `sorted()`: **sim**;
-   - pivôs sorteados: **13 230** na pura e **13 230** na híbrida com corte = 1;
-   - chamadas à inserção com corte = 1: **0**.
-3. **Tempo:** 36,37 ms (corte = 1) contra 35,69 ms (pura). A híbrida com corte = 1 saiu 1,5% a 1,9% mais lenta nas três rodadas que fiz (principal, `--semente 7` e a dos cortes grandes). Essa diferença é muito menor que o desvio-padrão (4–8 ms) e é compatível com o pequeno custo extra de receber os parâmetros `corte` e `stats` e testar `n < corte` a cada chamada — o algoritmo, porém, é o mesmo.
+Os dados consolidados foram registrados no arquivo `dados/resultados.csv`, que contém os resultados necessários para consultar e comparar o desempenho dos algoritmos.
 
-## 6. Conclusões
+## 4. Resultados obtidos
 
-- Combinar métodos funciona: um corte entre 16 e 32 deixou a ordenação cerca de **27–29% mais rápida** que a rápida pura.
-- A curva tem forma de “U”: pouco corte desperdiça recursão em pedaços minúsculos; muito corte entrega à inserção pedaços onde o custo quadrático domina.
-- O valor ótimo depende da linguagem e da implementação. Aqui, em Python (onde cada chamada recursiva e cada lista auxiliar têm custo alto), a faixa ótima foi 16–32; em outra linguagem ou com partição in-place ela pode ser bem diferente, então **meça** em vez de copiar este número.
+A tabela apresenta os resultados registrados no arquivo `dados/resultados.csv`. A coluna de ganho indica a redução percentual do tempo mediano em relação ao Quicksort puro. Valores positivos representam melhora de desempenho, enquanto valores negativos indicam que a versão híbrida foi mais lenta.
+
+| Configuração | Tempo mediano (ms) | Ganho sobre o Quicksort puro |
+|---|---:|---:|
+| Quicksort puro | 35,69 | Referência |
+| Corte 1 | 36,37 | -1,9% |
+| Corte 5 | 31,76 | +11,0% |
+| Corte 10 | 27,01 | +24,3% |
+| Corte 16 | 25,65 | +28,1% |
+| Corte 20 | 25,24 | +29,3% |
+| Corte 32 | 25,95 | +27,3% |
+| Corte 50 | 27,10 | +24,1% |
+| Corte 100 | 32,57 | +8,7% |
+| Corte 200 | 46,81 | -31,2% |
+
+*Fonte: resultados experimentais registrados em `dados/resultados.csv`.*
+
+### 4.1. Melhor valor de corte
+
+Entre os valores avaliados, o corte igual a 20 apresentou o menor tempo mediano, de aproximadamente 25,24 milissegundos.
+
+Em comparação com o Quicksort puro, que apresentou tempo mediano de 35,69 milissegundos, essa configuração obteve uma redução de aproximadamente 29,3% no tempo de execução.
+
+Os cortes 16 e 32 também apresentaram bons resultados. Isso indica que o desempenho não depende de um único valor exato, mas de uma faixa de cortes que equilibra os custos de particionamento do Quicksort e de ordenação por inserção.
+
+O corte 20 foi o melhor entre os valores testados neste experimento. Esse resultado não significa que ele será necessariamente o melhor para qualquer quantidade de elementos, distribuição de dados ou ambiente de execução.
+
+### 4.2. Efeito de valores de corte elevados
+
+Os resultados mostram que aumentar o corte indefinidamente não melhora o desempenho do algoritmo.
+
+Com o corte 50, o tempo mediano aumentou em relação aos cortes 16, 20 e 32. Com o corte 100, o ganho em relação ao Quicksort puro caiu para aproximadamente 8,7%. Já com o corte 200, o algoritmo híbrido foi aproximadamente 31,2% mais lento que a versão pura.
+
+Esse comportamento ocorre porque o Insertion Sort possui custo quadrático, \(O(n^2)\), no pior caso. Quando o corte é muito elevado, sublistas maiores são ordenadas por inserção, aumentando o número de operações necessárias.
+
+Portanto, o valor de corte precisa ser escolhido de maneira equilibrada: deve ser suficiente para reduzir o custo das chamadas recursivas em sublistas pequenas, mas não tão alto a ponto de tornar o Insertion Sort responsável por uma parcela excessiva do trabalho.
+
+## 5. Gráfico de desempenho
+
+A Figura 1 apresenta o desempenho do Quicksort híbrido para os diferentes valores de corte avaliados, em comparação com o Quicksort puro.
+
+![Gráfico de desempenho do Quicksort híbrido](dados/resultados.png)
+
+**Figura 1 – Comparação do tempo de execução do Quicksort híbrido para diferentes valores de corte.**
+
+*Fonte: elaborado pelos autores a partir dos resultados experimentais.*
+
+O eixo horizontal representa os valores de corte utilizados pelo algoritmo híbrido, enquanto o eixo vertical representa o tempo de execução. A linha de referência do Quicksort puro permite comparar o desempenho de cada configuração.
+
+Observa-se que o tempo mediano diminui conforme o corte aumenta de 1 até 20. A partir desse ponto, os tempos voltam a crescer, indicando que cortes maiores nem sempre proporcionam melhor desempenho.
+
+O corte 20 apresentou o menor tempo mediano entre as configurações avaliadas, com aproximadamente 25,24 milissegundos. Esse resultado reforça a importância de equilibrar o custo das chamadas recursivas do Quicksort com o custo de ordenação por inserção.
+
+
+## 6. Verificação do corte igual a 1
+
+Um dos requisitos do experimento é verificar se o Quicksort híbrido com corte igual a 1 se comporta como o Quicksort puro.
+
+Nesse caso, o Insertion Sort não é utilizado para sublistas com mais de um elemento. Assim, o algoritmo mantém a estratégia de particionamento do Quicksort, e ambas as versões produzem o mesmo resultado para uma mesma entrada.
+
+As medições de tempo não precisam ser numericamente idênticas, pois podem sofrer pequenas variações decorrentes do ambiente de execução e das características da implementação. Nos resultados obtidos, o corte 1 apresentou tempo mediano de 36,37 milissegundos, próximo ao tempo de 35,69 milissegundos do Quicksort puro.
+
+Essa diferença de tempo não significa, por si só, que os algoritmos tenham estratégias de ordenação diferentes nesse caso. A verificação também considera o comportamento do algoritmo e a ausência de chamadas ao Insertion Sort para sublistas com mais de um elemento.
+
+## 7. Conclusão
+
+Os experimentos demonstraram que a combinação do Quicksort com o Insertion Sort pode reduzir o tempo de execução da ordenação, desde que o valor de corte seja escolhido adequadamente.
+
+Entre os valores avaliados, o corte 20 apresentou o melhor resultado, com tempo mediano de 25,24 milissegundos e ganho aproximado de 29,3% em relação ao Quicksort puro.
+
+Também foi observado que valores de corte muito elevados podem prejudicar o desempenho. Isso acontece porque o custo quadrático do Insertion Sort passa a influenciar mais significativamente a execução.
+
+A análise confirma a importância de avaliar experimentalmente os parâmetros de um algoritmo híbrido, pois a escolha adequada depende do equilíbrio entre os custos dos algoritmos utilizados.
+
+Por fim, o corte igual a 1 preserva o comportamento de particionamento do Quicksort puro, enquanto os resultados do experimento mostram que cortes intermediários, especialmente entre 16 e 32, oferecem o melhor desempenho nas condições avaliadas.
+
+## 8. Arquivos de resultados
+
+Os resultados do experimento são disponibilizados em dois arquivos:
+
+- **`dados/resultados.csv`:** reúne os dados numéricos das medições, permitindo consultar e comparar os tempos de execução e os ganhos relativos das configurações avaliadas.
+- **`dados/resultados.png`:** apresenta a visualização gráfica dos resultados, facilitando a identificação do valor de corte com melhor desempenho e a comparação com o Quicksort puro.
+
+Em conjunto, os arquivos permitem analisar tanto os valores individuais das medições quanto o comportamento geral do algoritmo híbrido.
